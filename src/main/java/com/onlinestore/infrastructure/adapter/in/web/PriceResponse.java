@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Representacion HTTP de la respuesta.
+ * HTTP representation of the response.
  */
 public record PriceResponse(
         Long productId,

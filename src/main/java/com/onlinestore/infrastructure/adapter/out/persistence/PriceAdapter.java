@@ -8,8 +8,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Adaptador de salida: implementa el puerto de dominio LoadPricePort usando JPA,
- * traduciendo entre la entidad tecnica PriceEntity y el modelo de dominio Price.
+ * Outbound adapter: implements the {@link LoadPricePort} output port using
+ * Spring Data JPA, translating between the technical entity
+ * ({@link PriceEntity}) and the domain model ({@link Price}).
  */
 @Component
 class PriceAdapter implements LoadPricePort {

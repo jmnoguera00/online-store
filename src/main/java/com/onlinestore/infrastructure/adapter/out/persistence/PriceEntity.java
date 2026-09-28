@@ -9,6 +9,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 
+/**
+ * JPA entity mapped to the PRICES table.
+ */
 @Entity
 @Table(name = "prices")
 @Getter

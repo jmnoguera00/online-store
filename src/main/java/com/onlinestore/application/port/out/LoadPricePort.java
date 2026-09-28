@@ -6,8 +6,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Puerto de salida de la aplicación (output port)
- * Devuelve TODAS las tarifas candidatas cuyo rango de fechas cubre la fecha de aplicacion
+ * Output port:
+ * It returns ALL the candidate prices whose date range covers the application date (ranges may overlap).
  */
 public interface LoadPricePort {
 
