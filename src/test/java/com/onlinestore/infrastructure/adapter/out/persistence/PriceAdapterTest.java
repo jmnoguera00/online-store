@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @DataJpaTest
 @Import(PriceAdapter.class)
-class PricePersistenceAdapterTest {
+class PriceAdapterTest {
 
     @Autowired
     private PriceAdapter adapter;

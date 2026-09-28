@@ -129,8 +129,8 @@ mvn test
 
 | Class | Type | What it verifies |
 |---|---|---|
-| `GetApplicablePriceServiceTest` | Unit (Mockito, no Spring) | The priority-selection algorithm with `LoadPricePort` mocked: single candidate, overlapping candidates, input order independence, mixed priorities, empty result |
-| `PricePersistenceAdapterTest` | `@DataJpaTest` | Date-range query (overlaps, inclusive boundaries, other product/brand) and the entity to domain mapping of every field |
+| `PriceServiceTest` | Unit (Mockito, no Spring) | The priority-selection algorithm with `LoadPricePort` mocked: single candidate, overlapping candidates, input order independence, mixed priorities, empty result |
+| `PriceAdapterTest` | `@DataJpaTest` | Date-range query (overlaps, inclusive boundaries, other product/brand) and the entity to domain mapping of every field |
 | `PriceControllerTest` | `@WebMvcTest` (use case mocked) | Request binding: each missing parameter, invalid types and malformed dates return `400` with the error body; `404` mapping; mapping of the response |
 | `PriceResponseTest` | Unit | Domain to `PriceResponse` mapping of every field |
 | `PriceControllerIntegrationTest` | `@SpringBootTest` + `MockMvc` | End to end: the 5 scenarios of the brief (one `@ParameterizedTest`) plus `404` and `400` |
