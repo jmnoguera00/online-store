@@ -1,10 +1,10 @@
-# Online Store IV
+# Online Store
 
-A REST service that returns the applicable price for a product of a retail
-chain (brand) at a given date and time, resolving overlapping price rates
-by priority.
+A REST service that returns the applicable price of a product of a retail
+brand at a given date and time, resolving overlapping price lists by priority.
 
-Built as a technical test using **hexagonal architecture** (ports & adapters).
+Built as a technical test using **hexagonal architecture** and developed with AI assistance
+(see [AI-assisted development](#ai-assisted-development)).
 
 ---
 
@@ -50,9 +50,9 @@ into three packages with a strict dependency rule:
       .orElseThrow(() -> new PriceNotFoundException(...));
   ```
 
-  Because this use case only depends on the `LoadPricePort` interface (not
-  on JPA or Spring), the algorithm is fully unit-testable with a mocked
-  port — no database, no Spring context required.
+- **Bean wiring** lives in `infrastructure/config/UseCaseConfiguration`. The
+  use case class carries no Spring annotation, so `domain` and `application`
+  have no framework dependency at all and can be compiled with plain `javac`.
 
 ---
 
@@ -65,17 +65,19 @@ mvn spring-boot:run
 App starts on `http://localhost:8080` and loads the sample dataset into the `PRICES` table via `data.sql` on startup.
 
 H2 console: `http://localhost:8080/h2-console`
-(JDBC URL: `jdbc:h2:mem:pricesdb`, user `sa`, no password).
+(JDBC URL `jdbc:h2:mem:pricesdb`, user `sa`, empty password).
 
 ---
 
 ## Endpoint
 
 ```
-GET /api/v1/prices?applicationDate={ISO_DATE_TIME}&productId={long}&brandId={long}
+GET /api/v1/prices?applicationDate={ISO-8601 date-time}&productId={number}&brandId={number}
 ```
 
-**Example request**
+All three parameters are required.
+
+**Example Request**
 
 ```
 GET /api/v1/prices?applicationDate=2020-06-14T16:00:00&productId=35455&brandId=1
@@ -95,39 +97,47 @@ GET /api/v1/prices?applicationDate=2020-06-14T16:00:00&productId=35455&brandId=1
 }
 ```
 
-**No applicable rate — 404 Not Found**
+### Errors
+
+| Status | When | Example `message` |
+|---|---|---|
+| `400 Bad Request` | A required parameter is missing | `Required parameter 'productId' is missing` |
+| `400 Bad Request` | A parameter cannot be converted to its type | `Parameter 'productId' has an invalid value 'abc': expected a whole number` |
+| `404 Not Found` | No price is applicable for the given criteria | `No applicable price found for brandId=1, productId=35455 at 2021-01-01T00:00` |
+
+Both `400` and `404` responses share the same body:
 
 ```json
 {
-  "timestamp": "2026-09-24T10:15:30",
-  "status": 404,
-  "error": "Not Found",
-  "message": "No existe tarifa aplicable para brandId=1, productId=35455 en la fecha 2021-01-01T00:00"
+  "timestamp": "2026-09-28T10:15:30.123",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Required parameter 'productId' is missing"
 }
 ```
 
-Invalid or missing parameters return `400 Bad Request` with the same error
-shape.
+Errors raised by the framework itself for other reasons (for example `405 Method
+Not Allowed`) keep Spring Boot's default error format.
 
 ---
 
-## Testing strategy
-
-Three isolated test levels, each targeting a different layer:
-
-| Class | Type                                       | What it verifies |
-|---|--------------------------------------------|---|
-| `PriceServiceTest` | Unit test (Mockito, no Spring context)     | The priority-selection algorithm (streams), with `LoadPricePort` mocked — covers a single candidate, multiple overlapping candidates, three mixed priorities, and the empty-result case |
-| `PriceModelPersistenceAdapterTest` | `@DataJpaTest` (JPA slice only)            | The date-range query returns the correct overlapping candidates and the entity→domain mapping is correct |
-| `PriceControllerIntegrationTest` | `@SpringBootTest` + `MockMvc` (end-to-end) | The full HTTP contract (all response fields) across all 5 scenarios from the test brief, plus a negative (404) case |
+## Testing
 
 ```bash
 mvn test
 ```
 
-**Scenarios from the technical brief** (product `35455`, brand `1`):
+| Class | Type | What it verifies |
+|---|---|---|
+| `GetApplicablePriceServiceTest` | Unit (Mockito, no Spring) | The priority-selection algorithm with `LoadPricePort` mocked: single candidate, overlapping candidates, input order independence, mixed priorities, empty result |
+| `PricePersistenceAdapterTest` | `@DataJpaTest` | Date-range query (overlaps, inclusive boundaries, other product/brand) and the entity to domain mapping of every field |
+| `PriceControllerTest` | `@WebMvcTest` (use case mocked) | Request binding: each missing parameter, invalid types and malformed dates return `400` with the error body; `404` mapping; mapping of the response |
+| `PriceResponseTest` | Unit | Domain to `PriceResponse` mapping of every field |
+| `PriceControllerIntegrationTest` | `@SpringBootTest` + `MockMvc` | End to end: the 5 scenarios of the brief (one `@ParameterizedTest`) plus `404` and `400` |
 
-| # | Date & time | Expected `priceList` | Expected `price` |
+Scenarios of the technical brief (product `35455`, brand `1`):
+
+| # | Date and time | Expected `priceList` | Expected `price` |
 |---|---|---|---|
 | 1 | 2020-06-14 10:00 | 1 | 35.50 |
 | 2 | 2020-06-14 16:00 | 2 | 25.45 |
@@ -135,4 +145,28 @@ mvn test
 | 4 | 2020-06-15 10:00 | 3 | 30.50 |
 | 5 | 2020-06-16 21:00 | 4 | 38.95 |
 
+---
 
+## Design notes
+
+- **Separate models per boundary.** `PriceResponse` (HTTP) and `PriceEntity`
+  (JPA) are infrastructure concerns; the domain only knows the `Price` record.
+- **Anemic domain model on purpose.** All orchestration, including the overlap
+  resolution rule, lives in the use case. That is why `LoadPricePort` belongs
+  to `application`: nothing in the domain model itself calls it.
+- **Encapsulated persistence.** `PriceRepository` and
+  `PriceAdapter` are package-private; the rest of the application
+  only sees the `LoadPricePort` interface.
+- **Required parameters by default.** `@RequestParam` is mandatory unless stated
+  otherwise, so no extra validation annotations are needed; binding errors are
+  translated in `GlobalExceptionHandler`.
+
+---
+
+## AI-assisted development
+
+This project was built with the help of an AI assistant (Claude Code). The
+supporting material is part of the repository:
+
+- [`docs/spec.md`](docs/spec.md): the requirements and acceptance scenarios the work was driven by.
+- [`AGENTS.md`](AGENTS.md): architecture rules, conventions and commands that any AI agent (or contributor) must follow.
