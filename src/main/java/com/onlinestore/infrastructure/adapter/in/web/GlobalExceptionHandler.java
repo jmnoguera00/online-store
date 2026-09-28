@@ -3,44 +3,52 @@ package com.onlinestore.infrastructure.adapter.in.web;
 import com.onlinestore.domain.exception.PriceNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 
 /**
- * Controla los posibles errores de la aplicacion y devuelve un JSON con el error y el status HTTP correspondiente.
+ * Translates domain exceptions and request binding errors into HTTP responses
+ * with a consistent {@link ErrorResponse} body.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(PriceNotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleNotFound(PriceNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorBody(HttpStatus.NOT_FOUND, ex.getMessage()));
+    public ResponseEntity<ErrorResponse> handlePriceNotFound(PriceNotFoundException ex) {
+        return build(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
-        String message = ex.getBindingResult().getFieldErrors().stream()
-                .findFirst()
-                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
-                .orElse("Parametros de entrada invalidos");
-        return ResponseEntity.badRequest().body(errorBody(HttpStatus.BAD_REQUEST, message));
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParameter(MissingServletRequestParameterException ex) {
+        return build(HttpStatus.BAD_REQUEST,
+                "Required parameter '%s' is missing".formatted(ex.getParameterName()));
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
-        return ResponseEntity.badRequest().body(errorBody(HttpStatus.BAD_REQUEST, ex.getMessage()));
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return build(HttpStatus.BAD_REQUEST,
+                "Parameter '%s' has an invalid value '%s': expected %s"
+                        .formatted(ex.getName(), ex.getValue(), describeExpectedType(ex.getRequiredType())));
     }
 
-    private Map<String, Object> errorBody(HttpStatus status, String message) {
-        return Map.of(
-                "timestamp", LocalDateTime.now(),
-                "status", status.value(),
-                "error", status.getReasonPhrase(),
-                "message", message
-        );
+    private static String describeExpectedType(Class<?> type) {
+        if (type == null) {
+            return "a valid value";
+        }
+        if (LocalDateTime.class.isAssignableFrom(type)) {
+            return "an ISO-8601 date-time (e.g. 2020-06-14T16:00:00)";
+        }
+        if (Number.class.isAssignableFrom(type)) {
+            return "a whole number";
+        }
+        return "a value of type " + type.getSimpleName();
+    }
+
+    private static ResponseEntity<ErrorResponse> build(HttpStatus status, String message) {
+        return ResponseEntity.status(status).body(ErrorResponse.of(status, message));
     }
 }
