@@ -5,15 +5,16 @@ import com.onlinestore.application.port.in.GetApplicablePriceUseCase;
 import com.onlinestore.application.port.out.LoadPricePort;
 import com.onlinestore.domain.exception.PriceNotFoundException;
 import com.onlinestore.domain.model.Price;
-import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
 import java.util.List;
 
 /**
- * Caso de uso "obtener tarifa aplicable". Depende unicamente de puertos
+ * "Get applicable price" use case. It only depends on ports (interfaces) and on the domain
+ * The bean is declared in infrastructure layer (see {@code UseCaseConfiguration}),
+ * which keeps this class free of any framework annotation and
+ * trivially unit-testable with a mocked output port.
  */
-@Service
 public class PriceService implements GetApplicablePriceUseCase {
 
     private final LoadPricePort loadPricePort;
@@ -27,7 +28,8 @@ public class PriceService implements GetApplicablePriceUseCase {
         List<Price> candidates = loadPricePort.loadCandidatePrices(
                 query.brandId(), query.productId(), query.applicationDate());
 
-        //de entre todas las tarifas cuyo rango de fechas cubre la fecha solicitada, se aplica la de mayor prioridad.
+        // Resolution algorithm: among all the prices whose date range covers the
+        // requested date, the one with the highest priority wins.
         return candidates.stream()
                 .max(Comparator.comparingInt(Price::priority))
                 .orElseThrow(() -> new PriceNotFoundException(
