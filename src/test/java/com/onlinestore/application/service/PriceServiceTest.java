@@ -19,8 +19,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 /**
- * Test unitario del caso de uso PriceService:
- * se mockea el puerto de salida y se comprueba exclusivamente el algoritmo de negocio
+ * Unit test of {@link PriceService}. No Spring context and no DB
+ * The output port is mocked and only the business algorithm is verified.
  */
 @ExtendWith(MockitoExtension.class)
 class PriceServiceTest {
@@ -28,6 +28,8 @@ class PriceServiceTest {
     private static final Long BRAND_ID = 1L;
     private static final Long PRODUCT_ID = 35455L;
     private static final LocalDateTime APPLICATION_DATE = LocalDateTime.of(2020, 6, 14, 16, 0, 0);
+    private static final PriceQueryInputParams QUERY =
+            new PriceQueryInputParams(APPLICATION_DATE, PRODUCT_ID, BRAND_ID);
 
     @Mock
     private LoadPricePort loadPricePort;
@@ -40,57 +42,59 @@ class PriceServiceTest {
     }
 
     @Test
-    void unSoloCandidato_devuelveEseCandidato() {
-        Price unica = priceWithPriority(0, "35.50");
+    void singleCandidate_returnsThatCandidate() {
+        Price only = priceWithPriority(0, "35.50");
         when(loadPricePort.loadCandidatePrices(BRAND_ID, PRODUCT_ID, APPLICATION_DATE))
-                .thenReturn(List.of(unica));
+                .thenReturn(List.of(only));
 
-        Price resultado = service.getApplicablePrice(
-                new PriceQueryInputParams(APPLICATION_DATE, PRODUCT_ID, BRAND_ID));
-
-        assertThat(resultado).isEqualTo(unica);
+        assertThat(service.getApplicablePrice(QUERY)).isEqualTo(only);
     }
 
     @Test
-    void variosCandidatosSolapados_eligeElDeMayorPrioridad() {
-        Price prioridadBaja = priceWithPriority(0, "35.50");
-        Price prioridadAlta = priceWithPriority(1, "25.45");
-
+    void overlappingCandidates_returnsHighestPriority() {
+        Price lowPriority = priceWithPriority(0, "35.50");
+        Price highPriority = priceWithPriority(1, "25.45");
         when(loadPricePort.loadCandidatePrices(BRAND_ID, PRODUCT_ID, APPLICATION_DATE))
-                .thenReturn(List.of(prioridadBaja, prioridadAlta));
+                .thenReturn(List.of(lowPriority, highPriority));
 
-        Price resultado = service.getApplicablePrice(
-                new PriceQueryInputParams(APPLICATION_DATE, PRODUCT_ID, BRAND_ID));
+        Price result = service.getApplicablePrice(QUERY);
 
-        assertThat(resultado).isEqualTo(prioridadAlta);
-        assertThat(resultado.priority()).isEqualTo(1);
+        assertThat(result).isEqualTo(highPriority);
+        assertThat(result.priority()).isEqualTo(1);
     }
 
     @Test
-    void tresCandidatosConPrioridadesMezcladas_eligeElMaximo() {
+    void listOrderDoesNotMatter_returnsHighestPriority() {
+        // Same scenario as above with the candidates in reverse order: the
+        // algorithm must not depend on the order returned by the persistence layer.
+        Price highPriority = priceWithPriority(1, "25.45");
+        Price lowPriority = priceWithPriority(0, "35.50");
+        when(loadPricePort.loadCandidatePrices(BRAND_ID, PRODUCT_ID, APPLICATION_DATE))
+                .thenReturn(List.of(highPriority, lowPriority));
+
+        assertThat(service.getApplicablePrice(QUERY)).isEqualTo(highPriority);
+    }
+
+    @Test
+    void threeCandidatesWithMixedPriorities_returnsTheMaximum() {
         Price p0 = priceWithPriority(0, "35.50");
         Price p2 = priceWithPriority(2, "38.95");
         Price p1 = priceWithPriority(1, "30.50");
-
         when(loadPricePort.loadCandidatePrices(BRAND_ID, PRODUCT_ID, APPLICATION_DATE))
                 .thenReturn(List.of(p0, p2, p1));
 
-        Price resultado = service.getApplicablePrice(
-                new PriceQueryInputParams(APPLICATION_DATE, PRODUCT_ID, BRAND_ID));
-
-        assertThat(resultado).isEqualTo(p2);
+        assertThat(service.getApplicablePrice(QUERY)).isEqualTo(p2);
     }
 
     @Test
-    void sinCandidatos_lanzaPriceNotFoundException() {
+    void noCandidates_throwsPriceNotFoundException() {
         when(loadPricePort.loadCandidatePrices(BRAND_ID, PRODUCT_ID, APPLICATION_DATE))
                 .thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.getApplicablePrice(
-                new PriceQueryInputParams(APPLICATION_DATE, PRODUCT_ID, BRAND_ID)))
+        assertThatThrownBy(() -> service.getApplicablePrice(QUERY))
                 .isInstanceOf(PriceNotFoundException.class)
-                .hasMessageContaining(String.valueOf(PRODUCT_ID))
-                .hasMessageContaining(String.valueOf(BRAND_ID));
+                .hasMessageContaining("brandId=" + BRAND_ID)
+                .hasMessageContaining("productId=" + PRODUCT_ID);
     }
 
     private Price priceWithPriority(int priority, String price) {
